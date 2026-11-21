@@ -34,6 +34,13 @@
 #define KEEPALIVE_PERIOD 1
 #define RECOVERY_CHANCE_PERIOD 5
 
+// Per-source-IP throttle for SRT authentication failures (core/auth_throttle).
+// Lenient on purpose, so a mistyped stream ID or several broadcasters behind
+// one NAT are not locked out.
+#define AUTH_FAIL_THRESHOLD 5  // failures within the window that trip the block
+#define AUTH_FAIL_WINDOW    60 // seconds
+#define AUTH_FAIL_COOLDOWN  60 // seconds a tripped source IP stays blocked
+
 // Number of sequence numbers accumulated before an SRTLA ACK is sent
 #define RECV_ACK_INT 10
 

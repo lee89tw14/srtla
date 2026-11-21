@@ -97,6 +97,12 @@ int is_srt_nak(void *pkt, int n);
 int is_srt_shutdown(void *pkt, int n);
 int is_srt_induction(void *pkt, int n);
 
+// libsrt rejects a handshake by putting a failure code in the handshake type
+// field. Induction is 1 and conclusion/agreement are negative as unsigned, so a
+// value in [1000, 0x80000000) is a refusal.
+#define SRT_REJECTION_CODE_BASE 1000
+int is_srt_handshake_reject(void *pkt, int n);
+
 int is_srtla_keepalive(void *pkt, int len);
 int is_srtla_reg1(void *pkt, int len);
 int is_srtla_reg2(void *pkt, int len);

@@ -102,6 +102,7 @@ void srtla_conn_group::close_srt_socket()
   epoll_rem(srt_sock);
   close(srt_sock);
   srt_sock = -1;
+  established = false;
   srt_dest_socket_id = 0;
   last_stats_sent_ms = 0;
 }

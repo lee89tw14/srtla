@@ -33,6 +33,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include "core/auth_throttle.h"
 #include "core/config.h"
 #include "core/state.h"
 #include "core/registry.h"
@@ -56,6 +57,22 @@ void handle_srt_data(srtla_conn_group_ptr g) {
   // Ignore runt datagrams without tearing down the session.
   if (n < SRT_MIN_LEN)
     return;
+
+  // An SRT ACK from the server means media is flowing, so the session was accepted.
+  if (is_srt_ack(buf, n))
+    g->established = true;
+
+  // A rejected connection shows up as a libsrt handshake rejection, or as a
+  // SHUTDOWN before the session was established. Count it against the source IP.
+  // The packet is still relayed below so the client sees the rejection.
+  bool failed_auth = is_srt_handshake_reject(buf, n) || (is_srt_shutdown(buf, n) && !g->established);
+  if (failed_auth) {
+    // Same clock as register_group() and the cleanup pass read it back with.
+    time_t now = 0;
+    get_seconds(&now);
+    spdlog::warn("[{}:{}] [Group: {}] SRT server rejected the connection before it was established", print_addr(&g->last_addr), port_no(&g->last_addr), static_cast<void *>(g.get()));
+    auth_throttle_record_failure(&g->last_addr, now);
+  }
 
   // Broadcast SRT ACKs and NAKs over all connections for timely delivery
   if (is_srt_ack(buf, n) || is_srt_nak(buf, n)) {
@@ -88,5 +105,13 @@ void handle_srt_data(srtla_conn_group_ptr g) {
     if (ret != n) {
       spdlog::error("[{}:{}] [Group: {}] Failed to send the SRT packet", print_addr(&g->last_addr), port_no(&g->last_addr), static_cast<void *>(g.get()));
     }
+  }
+
+  // The client has been sent the rejection. Free the slot now instead of
+  // letting the group linger until it times out. The caller's main loop stops
+  // using its epoll events once the group count shrinks.
+  if (failed_auth) {
+    spdlog::info("[Group: {}] Removing the rejected group", static_cast<void *>(g.get()));
+    remove_group(g);
   }
 }

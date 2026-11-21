@@ -76,6 +76,12 @@ struct srtla_conn_group {
     // does is a "ghost" (e.g. from a REG1 flood) and may be evicted under load.
     bool data_seen = false;
 
+    // True once the SRT server has ACKed media on the current SRT socket, so the
+    // session was accepted. srt-live-server accepts the handshake before it
+    // checks the stream ID and closes the socket on failure, so a SHUTDOWN from
+    // the server before this is set means a rejected connection.
+    bool established = false;
+
     // Fields for SRTLA stats reporting
     uint32_t srt_dest_socket_id = 0;     // SRT destination socket ID (learned from forwarded packets)
     uint64_t last_stats_sent_ms = 0;     // Timestamp of last stats packet sent (ms)

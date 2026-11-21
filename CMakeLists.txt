@@ -15,6 +15,7 @@ add_library(srtla_core STATIC
     src/proto/protocol.cpp
     src/core/state.cpp
     src/core/conn.cpp
+    src/core/auth_throttle.cpp
     src/core/registry.cpp
     src/net/socket_util.cpp
     src/net/srt_handler.cpp
@@ -28,5 +29,10 @@ add_executable(srtla_rec src/main.cpp)
 target_include_directories(srtla_rec PRIVATE deps/argparse/include)
 target_link_libraries(srtla_rec PRIVATE srtla_core)
 target_compile_definitions(srtla_rec PRIVATE VERSION="${CMAKE_PROJECT_VERSION}")
+
+# Self-check, not part of the default build: make test_auth_throttle && ./test_auth_throttle
+add_executable(test_auth_throttle EXCLUDE_FROM_ALL src/core/test_auth_throttle.cpp)
+target_link_libraries(test_auth_throttle PRIVATE srtla_core)
+target_compile_options(test_auth_throttle PRIVATE -UNDEBUG) # the checks are assert()s
 
 install(TARGETS srtla_rec)

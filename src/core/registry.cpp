@@ -29,6 +29,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include "core/auth_throttle.h"
 #include "core/config.h"
 #include "core/state.h"
 #include "net/socket_util.h"
@@ -65,6 +66,14 @@ void group_find_by_addr(struct sockaddr *addr, srtla_conn_group_ptr &rg, srtla_c
 }
 
 int register_group(struct sockaddr *addr, char *in_buf, time_t ts) {
+  // Refuse a source IP that recently failed SRT auth repeatedly, before it can
+  // take a slot in the group table.
+  if (auth_throttle_blocked(addr, ts)) {
+    srtla_send_reg_err(addr);
+    spdlog::warn("[{}:{}] Group registration refused: source throttled for repeated SRT auth failures", print_addr(addr), port_no(addr));
+    return -1;
+  }
+
   // Reject an already-registered remote address before touching the group
   // table, so a re-REG1 can never evict an unrelated pending group.
   srtla_conn_group_ptr group;
@@ -216,6 +225,8 @@ void cleanup_groups_connections(time_t ts) {
   if ((last_ran + CLEANUP_PERIOD) > ts)
     return;
   last_ran = ts;
+
+  auth_throttle_cleanup(ts);
 
   if (!conn_groups.size())
     return;
