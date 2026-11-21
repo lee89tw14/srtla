@@ -18,10 +18,10 @@ srtla_rec is an SRT transport proxy with link aggregation. SRTLA is designed to 
 
 ## Requirements
 
-- C++11 compatible compiler
+- C++17 compatible compiler
 - CMake for the build process
 - spdlog library
-- argparse library
+- argparse (git submodule `deps/argparse`)
 
 ## Assumptions and Prerequisites
 
@@ -34,7 +34,7 @@ SRTLA assumes that:
 
 ```bash
 # Clone the repository
-git clone https://github.com/lee89tw14/srtla.git
+git clone --recurse-submodules https://github.com/lee89tw14/srtla.git
 cd srtla
 
 # Build with CMake
@@ -93,7 +93,7 @@ SRTLA implements a protocol for packet transmission over multiple network connec
    - `SRTLA_REG_ERR`: Operation temporarily failed
    - `SRTLA_REG_NGP`: Invalid ID, group must be re-registered
 
-5. **Connection Cleanup**: Inactive connections and groups are automatically cleaned up after a configurable timeout (default: 10 seconds).
+5. **Connection Cleanup**: Inactive connections and groups are automatically cleaned up after 4 seconds without traffic (`CONN_TIMEOUT` and `GROUP_TIMEOUT` in `src/core/config.h`).
 
 6. **Native Sender-Side Load Balancing**: SRT ACK and NAK control packets are broadcast over all connections, so the SRTLA sender reliably receives the feedback it needs to balance traffic across the links on its own.
 
