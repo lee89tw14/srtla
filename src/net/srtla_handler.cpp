@@ -263,19 +263,48 @@ static void learn_dest_socket_id(srtla_conn_group_ptr &g, char (&buf)[MTU], int 
   }
 }
 
-// Forward an SRT packet to the downstream server, removing the group on failure.
+// A failed send() on the group's non-blocking SRT socket is transient when the
+// local send path is momentarily out of room, typically a sender flushing its
+// backlog after an outage. Anything else (e.g. ECONNREFUSED after the SRT
+// server went away) cannot be fixed by the next packet.
+static bool is_transient_forward_error(int err) {
+  return err == EAGAIN || err == EWOULDBLOCK || err == ENOBUFS || err == EINTR;
+}
+
+// A full send buffer drops packets in bursts, so report them at most once a
+// second with a count instead of once per packet.
+static void log_forward_drop(srtla_conn_group_ptr &g, int err) {
+  static uint64_t dropped_since_log = 0;
+  static uint64_t last_log_ms = 0;
+  dropped_since_log++;
+
+  uint64_t now_ms = 0;
+  if (get_ms(&now_ms) != 0 || (last_log_ms != 0 && now_ms - last_log_ms < 1000))
+    return;
+
+  spdlog::warn("[Group: {}] SRT socket send buffer full ({}), dropped {} packet(s) since the last report. SRT recovers them once later packets reveal the gap",
+               static_cast<void *>(g.get()), strerror(err), dropped_since_log);
+  dropped_since_log = 0;
+  last_log_ms = now_ms;
+}
+
+// Forward an SRT packet to the downstream server. A transient send error drops
+// the packet and keeps the group; any other failure removes the group.
 static void forward_to_srt(srtla_conn_group_ptr &g, char (&buf)[MTU], int n) {
   int ret = send(g->srt_sock, &buf, n, 0);
   if (ret == n)
     return;
 
-  // Non-blocking backpressure: drop this packet, keep the session alive.
-  if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-    spdlog::debug("[Group: {}] SRT send backpressure, dropped a packet", static_cast<void *>(g.get()));
+  int err = errno;
+  if (ret < 0 && is_transient_forward_error(err)) {
+    log_forward_drop(g, err);
     return;
   }
 
-  spdlog::error("[Group: {}] Failed to forward SRTLA packet, terminating the group", static_cast<void *>(g.get()));
+  if (ret < 0)
+    spdlog::error("[Group: {}] Failed to forward SRTLA packet ({}), terminating the group", static_cast<void *>(g.get()), strerror(err));
+  else
+    spdlog::error("[Group: {}] Short send forwarding SRTLA packet ({} of {} bytes), terminating the group", static_cast<void *>(g.get()), ret, n);
   remove_group(g);
 }
 
