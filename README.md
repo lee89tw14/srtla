@@ -14,6 +14,7 @@ srtla_rec is an SRT transport proxy with link aggregation. SRTLA is designed to 
 - Logging of connection details for easy diagnostics
 - Reliable forwarding of SRT ACK/NAK feedback over all links so the sender can balance traffic natively
 - Connection recovery mechanism for temporary network issues
+- Throttling of source IPs that repeatedly fail SRT authentication
 
 ## Requirements
 
@@ -33,7 +34,7 @@ SRTLA assumes that:
 
 ```bash
 # Clone the repository
-git clone https://github.com/OpenIRL/srtla.git
+git clone https://github.com/lee89tw14/srtla.git
 cd srtla
 
 # Build with CMake
@@ -130,6 +131,12 @@ The following parameters can be adjusted to optimize behavior:
 
 - `KEEPALIVE_PERIOD`: Interval for keepalive packets during recovery (1 second)
 - `RECOVERY_CHANCE_PERIOD`: Period during which a connection can attempt to recover (5 seconds)
+
+## Authentication Failure Throttling
+
+srtla_rec does not authenticate anything itself. It relays the SRT handshake, and the SRT server decides. When the server rejects a connection (a handshake rejection, or a SHUTDOWN before it has acknowledged any media, which is what srt-live-server sends for an unknown stream ID), srtla_rec counts the failure against the source IP and removes the group.
+
+After `AUTH_FAIL_THRESHOLD` failures (5) within `AUTH_FAIL_WINDOW` (60 seconds), new group registrations from that IP are refused for `AUTH_FAIL_COOLDOWN` (60 seconds). The key is the IP without the port. Every broadcaster behind the same NAT address shares one counter, and a correct stream ID is also refused until the cooldown ends. The values are in `src/core/config.h`.
 
 ## SRT Configuration Recommendations
 
